@@ -7,7 +7,7 @@ import numpy as np
 from tensorflow.python.ops.rnn import bidirectional_dynamic_rnn, dynamic_rnn
 from layers import multi_conv1d, AttentionCell
 from logger import get_logger, Progbar
-from tensorflow.contrib.crf import crf_log_likelihood, viterbi_decode
+import tensorflow_addons as tfa 
 from sklearn.metrics import recall_score, precision_score, f1_score
 # from sklearn.metrics import confusion_matrix
 #
@@ -123,28 +123,28 @@ class BiLSTM_model:
         self.sess, self.saver = None, None
 
         # Add placeholder
-        self.words = tf.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
-        self.labels = tf.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time - 1)
-        self.seq_len = tf.placeholder(tf.int32, shape=[None], name="seq_len")
+        self.words = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
+        self.labels = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time - 1)
+        self.seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None], name="seq_len")
         # shape = (batch_size, max_time, max_word_length)
-        self.chars = tf.placeholder(tf.int32, shape=[None, None, None], name="chars")
-        self.char_seq_len = tf.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
+        self.chars = tf.compat.v1.placeholder(tf.int32, shape=[None, None, None], name="chars")
+        self.char_seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
         # hyper-parameters
-        self.is_train = tf.placeholder(tf.bool, shape=[], name="is_train")
-        self.batch_size = tf.placeholder(tf.int32, name="batch_size")
-        self.keep_prob = tf.placeholder(tf.float32, name="keep_probability")
-        self.drop_rate = tf.placeholder(tf.float32, name="dropout_rate")
-        self.lr = tf.placeholder(tf.float32, name="learning_rate")
+        self.is_train = tf.compat.v1.placeholder(tf.bool, shape=[], name="is_train")
+        self.batch_size = tf.compat.v1.placeholder(tf.int32, name="batch_size")
+        self.keep_prob = tf.compat.v1.placeholder(tf.float32, name="keep_probability")
+        self.drop_rate = tf.compat.v1.placeholder(tf.float32, name="dropout_rate")
+        self.lr = tf.compat.v1.placeholder(tf.float32, name="learning_rate")
 
         # Build embedding layer
-        with tf.variable_scope("embeddings"):
+        with tf.compat.v1.variable_scope("embeddings"):
             self.word_embeddings = tf.Variable(np.load(self.cfg["word_embedding"])["embeddings"], name="embedding",
                                                    dtype=tf.float32, trainable=False)
 
             word_emb = tf.nn.embedding_lookup(self.word_embeddings, self.words, name="word_emb")
             print("Word embedding shape: {}".format(word_emb.get_shape().as_list()))
 
-            self.char_embeddings = tf.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
+            self.char_embeddings = tf.compat.v1.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
                                                    shape=[self.char_vocab_size, self.cfg["char_emb_dim"]])
             char_emb = tf.nn.embedding_lookup(self.char_embeddings, self.chars, name="chars_emb")
             char_represent = multi_conv1d(char_emb, self.cfg["filter_sizes"], self.cfg["channel_sizes"],
@@ -152,14 +152,14 @@ class BiLSTM_model:
             print("Chars representation shape: {}".format(char_represent.get_shape().as_list()))
             self.word_emb = tf.concat([word_emb, char_represent], axis=-1)
 
-            self.word_emb = tf.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
+            self.word_emb = tf.compat.v1.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
             print("Word and chars concatenation shape: {}".format(self.word_emb.get_shape().as_list()))
 
         # Build model ops
-        with tf.name_scope("BiLSTM"):
-            with tf.variable_scope('forward'):
+        with tf.compat.v1.name_scope("BiLSTM"):
+            with tf.compat.v1.variable_scope('forward'):
                 lstm_fw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
-            with tf.variable_scope('backward'):
+            with tf.compat.v1.variable_scope('backward'):
                 lstm_bw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
             rnn_outs, *_= bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, self.word_emb, sequence_length=self.seq_len, dtype=tf.float32)
 
@@ -170,7 +170,7 @@ class BiLSTM_model:
             outputs = rnn_outs
             print("Output shape: {}".format(outputs.get_shape().as_list()))
 
-            self.logits = tf.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
+            self.logits = tf.compat.v1.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
 #            self.logits = tf.nn.softmax(self.logits)
             print("Logits shape: {}".format(self.logits.get_shape().as_list()))
         # Define loss and optimizer
@@ -180,18 +180,18 @@ class BiLSTM_model:
 #        losses = focal_loss(self.gamma, self.alpha)
 #        self.loss = losses(self.labels, self.logits)
 #        self.loss = tf.reduce_mean(self.loss)
-        tf.summary.scalar("loss", self.loss)
+        tf.compat.v1.summary.scalar("loss", self.loss)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.lr)
         self.train_op = optimizer.minimize(self.loss)
 
-        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
+        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.compat.v1.trainable_variables()])))
 
-        sess_config = tf.ConfigProto()
+        sess_config = tf.compat.v1.ConfigProto()
         sess_config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=sess_config)
-        self.saver = tf.train.Saver(max_to_keep=self.max_to_keep)
-        self.sess.run(tf.global_variables_initializer())
+        self.sess = tf.compat.v1.Session(config=sess_config)
+        self.saver = tf.compat.v1.train.Saver(max_to_keep=self.max_to_keep)
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def restore_last_session(self, ckpt_path=None):
         if ckpt_path is not None:
@@ -208,9 +208,9 @@ class BiLSTM_model:
         self.sess.close()
 
     def _add_summary(self):
-        self.summary = tf.summary.merge_all()
-        self.train_writer = tf.summary.FileWriter(self.summary_path + "train", self.sess.graph)
-        self.test_writer = tf.summary.FileWriter(self.summary_path + "test")
+        self.summary = tf.compat.v1.summary.merge_all()
+        self.train_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "train", self.sess.graph)
+        self.test_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "test")
 
     def _get_feed_dict(self, batch, keep_prob=0.5, is_train=False, lr=None):
         feed_dict = {self.words: batch["words"], self.seq_len: batch["seq_len"], self.batch_size: batch["batch_size"]}
@@ -367,28 +367,28 @@ class BiLSTM_Attention_model:
         self.sess, self.saver = None, None
 
         # Add placeholder
-        self.words = tf.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
-        self.labels = tf.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time - 1)
-        self.seq_len = tf.placeholder(tf.int32, shape=[None], name="seq_len")
+        self.words = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
+        self.labels = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time - 1)
+        self.seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None], name="seq_len")
         # shape = (batch_size, max_time, max_word_length)
-        self.chars = tf.placeholder(tf.int32, shape=[None, None, None], name="chars")
-        self.char_seq_len = tf.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
+        self.chars = tf.compat.v1.placeholder(tf.int32, shape=[None, None, None], name="chars")
+        self.char_seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
         # hyper-parameters
-        self.is_train = tf.placeholder(tf.bool, shape=[], name="is_train")
-        self.batch_size = tf.placeholder(tf.int32, name="batch_size")
-        self.keep_prob = tf.placeholder(tf.float32, name="keep_probability")
-        self.drop_rate = tf.placeholder(tf.float32, name="dropout_rate")
-        self.lr = tf.placeholder(tf.float32, name="learning_rate")
+        self.is_train = tf.compat.v1.placeholder(tf.bool, shape=[], name="is_train")
+        self.batch_size = tf.compat.v1.placeholder(tf.int32, name="batch_size")
+        self.keep_prob = tf.compat.v1.placeholder(tf.float32, name="keep_probability")
+        self.drop_rate = tf.compat.v1.placeholder(tf.float32, name="dropout_rate")
+        self.lr = tf.compat.v1.placeholder(tf.float32, name="learning_rate")
 
         # Build embedding layer
-        with tf.variable_scope("embeddings"):
+        with tf.compat.v1.variable_scope("embeddings"):
             self.word_embeddings = tf.Variable(np.load(self.cfg["word_embedding"])["embeddings"], name="embedding",
                                                    dtype=tf.float32, trainable=False)
 
             word_emb = tf.nn.embedding_lookup(self.word_embeddings, self.words, name="word_emb")
             print("Word embedding shape: {}".format(word_emb.get_shape().as_list()))
 
-            self.char_embeddings = tf.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
+            self.char_embeddings = tf.compat.v1.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
                                                    shape=[self.char_vocab_size, self.cfg["char_emb_dim"]])
             char_emb = tf.nn.embedding_lookup(self.char_embeddings, self.chars, name="chars_emb")
             char_represent = multi_conv1d(char_emb, self.cfg["filter_sizes"], self.cfg["channel_sizes"],
@@ -396,14 +396,14 @@ class BiLSTM_Attention_model:
             print("Chars representation shape: {}".format(char_represent.get_shape().as_list()))
             word_emb = tf.concat([word_emb, char_represent], axis=-1)
 
-            self.word_emb = tf.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
+            self.word_emb = tf.compat.v1.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
             print("Word and chars concatenation shape: {}".format(self.word_emb.get_shape().as_list()))
 
         # Build model ops
-        with tf.name_scope("BiLSTM"):
-            with tf.variable_scope('forward'):
+        with tf.compat.v1.name_scope("BiLSTM"):
+            with tf.compat.v1.variable_scope('forward'):
                 lstm_fw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
-            with tf.variable_scope('backward'):
+            with tf.compat.v1.variable_scope('backward'):
                 lstm_bw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
             rnn_outs, *_ = bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, self.word_emb, sequence_length=self.seq_len,
                                                          dtype=tf.float32)
@@ -411,18 +411,18 @@ class BiLSTM_Attention_model:
             # As we have a Bi-LSTM, we have two outputs which are not connected, so we need to merge them.
             rnn_outs = tf.concat(rnn_outs, axis=-1)
 
-            rnn_outs = tf.layers.dropout(rnn_outs, rate=self.drop_rate, training=self.is_train)
+            rnn_outs = tf.compat.v1.layers.dropout(rnn_outs, rate=self.drop_rate, training=self.is_train)
             outputs = rnn_outs
             print("Output shape: {}".format(outputs.get_shape().as_list()))
             context = tf.transpose(outputs, [1, 0, 2])
-            p_context = tf.layers.dense(outputs, units=2 * self.cfg["num_units"], use_bias=False)
+            p_context = tf.compat.v1.layers.dense(outputs, units=2 * self.cfg["num_units"], use_bias=False)
             p_context = tf.transpose(p_context, [1, 0, 2])
             attn_cell = AttentionCell(self.cfg["num_units"], context, p_context)  # time major based
             attn_outs, _ = dynamic_rnn(attn_cell, context, sequence_length=self.seq_len, time_major=True,
                                        dtype=tf.float32)
             outputs = tf.transpose(attn_outs, [1, 0, 2])
             print("Attention output shape: {}".format(outputs.get_shape().as_list()))
-            self.logits = tf.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
+            self.logits = tf.compat.v1.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
 #            self.logits = tf.nn.softmax(self.logits)
             print("Logits shape: {}".format(self.logits.get_shape().as_list()))
         # Define loss and optimizer
@@ -432,18 +432,18 @@ class BiLSTM_Attention_model:
 #        losses = focal_loss(self.gamma,self.alpha)
 #        self.loss = losses(self.labels, self.logits)
 #        self.loss = tf.reduce_mean(self.loss)
-        tf.summary.scalar("loss", self.loss)
+        tf.compat.v1.summary.scalar("loss", self.loss)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.lr)
         self.train_op = optimizer.minimize(self.loss)
 
-        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
+        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.compat.v1.trainable_variables()])))
 
-        sess_config = tf.ConfigProto()
+        sess_config = tf.compat.v1.ConfigProto()
         sess_config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=sess_config)
-        self.saver = tf.train.Saver(max_to_keep=self.max_to_keep)
-        self.sess.run(tf.global_variables_initializer())
+        self.sess = tf.compat.v1.Session(config=sess_config)
+        self.saver = tf.compat.v1.train.Saver(max_to_keep=self.max_to_keep)
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def restore_last_session(self, ckpt_path=None):
         if ckpt_path is not None:
@@ -460,9 +460,9 @@ class BiLSTM_Attention_model:
         self.sess.close()
 
     def _add_summary(self):
-        self.summary = tf.summary.merge_all()
-        self.train_writer = tf.summary.FileWriter(self.summary_path + "train", self.sess.graph)
-        self.test_writer = tf.summary.FileWriter(self.summary_path + "test")
+        self.summary = tf.compat.v1.summary.merge_all()
+        self.train_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "train", self.sess.graph)
+        self.test_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "test")
 
     def _get_feed_dict(self, batch, keep_prob=1.0, is_train=False, lr=None):
         feed_dict = {self.words: batch["words"], self.seq_len: batch["seq_len"], self.batch_size: batch["batch_size"]}
@@ -616,28 +616,28 @@ class BiLSTM_CRF_model:
         self.sess, self.saver = None, None
 
         # Add placeholder
-        self.words = tf.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
-        self.labels = tf.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time)
-        self.seq_len = tf.placeholder(tf.int32, shape=[None], name="seq_len")
+        self.words = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="words") # shape = (batch_size, max_time)
+        self.labels = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="label") # shape = (batch_size, max_time)
+        self.seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None], name="seq_len")
         # shape = (batch_size, max_time, max_word_length)
-        self.chars = tf.placeholder(tf.int32, shape=[None, None, None], name="chars")
-        self.char_seq_len = tf.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
+        self.chars = tf.compat.v1.placeholder(tf.int32, shape=[None, None, None], name="chars")
+        self.char_seq_len = tf.compat.v1.placeholder(tf.int32, shape=[None, None], name="char_seq_len")
         # hyper-parameters
-        self.is_train = tf.placeholder(tf.bool, shape=[], name="is_train")
-        self.batch_size = tf.placeholder(tf.int32, name="batch_size")
-        self.keep_prob = tf.placeholder(tf.float32, name="keep_probability")
-        self.drop_rate = tf.placeholder(tf.float32, name="dropout_rate")
-        self.lr = tf.placeholder(tf.float32, name="learning_rate")
+        self.is_train = tf.compat.v1.placeholder(tf.bool, shape=[], name="is_train")
+        self.batch_size = tf.compat.v1.placeholder(tf.int32, name="batch_size")
+        self.keep_prob = tf.compat.v1.placeholder(tf.float32, name="keep_probability")
+        self.drop_rate = tf.compat.v1.placeholder(tf.float32, name="dropout_rate")
+        self.lr = tf.compat.v1.placeholder(tf.float32, name="learning_rate")
 
         # Build embedding layer
-        with tf.variable_scope("embeddings"):
+        with tf.compat.v1.variable_scope("embeddings"):
             self.word_embeddings = tf.Variable(np.load(self.cfg["word_embedding"])["embeddings"], name="embedding",
                                                    dtype=tf.float32, trainable=False)
 
             word_emb = tf.nn.embedding_lookup(self.word_embeddings, self.words, name="word_emb")
             print("Word embedding shape: {}".format(word_emb.get_shape().as_list()))
 
-            self.char_embeddings = tf.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
+            self.char_embeddings = tf.compat.v1.get_variable(name="char_embedding", dtype=tf.float32, trainable=True,
                                                    shape=[self.char_vocab_size, self.cfg["char_emb_dim"]])
             char_emb = tf.nn.embedding_lookup(self.char_embeddings, self.chars, name="chars_emb")
             char_represent = multi_conv1d(char_emb, self.cfg["filter_sizes"], self.cfg["channel_sizes"],
@@ -645,14 +645,14 @@ class BiLSTM_CRF_model:
             print("Chars representation shape: {}".format(char_represent.get_shape().as_list()))
             word_emb = tf.concat([word_emb, char_represent], axis=-1)
 
-            self.word_emb = tf.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
+            self.word_emb = tf.compat.v1.layers.dropout(word_emb, rate=self.drop_rate, training=self.is_train)
             print("Word and chars concatenation shape: {}".format(self.word_emb.get_shape().as_list()))
 
         # Build model ops
-        with tf.name_scope("BiLSTM"):
-            with tf.variable_scope('forward'):
+        with tf.compat.v1.name_scope("BiLSTM"):
+            with tf.compat.v1.variable_scope('forward'):
                 lstm_fw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
-            with tf.variable_scope('backward'):
+            with tf.compat.v1.variable_scope('backward'):
                 lstm_bw_cell = tf.keras.layers.LSTMCell(self.cfg["num_units"])
             rnn_outs, *_ = bidirectional_dynamic_rnn(lstm_fw_cell, lstm_bw_cell, self.word_emb, sequence_length=self.seq_len,
                                                          dtype=tf.float32)
@@ -664,26 +664,26 @@ class BiLSTM_CRF_model:
             outputs = rnn_outs
             print("Output shape: {}".format(outputs.get_shape().as_list()))
 
-            self.logits = tf.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
+            self.logits = tf.compat.v1.layers.dense(outputs, units=self.label_vocab_size, use_bias=True)
 #            self.logits = tf.nn.softmax(self.logits)
             print("Logits shape: {}".format(self.logits.get_shape().as_list()))
         # Define loss and optimizer
-        crf_loss, self.trans_params = crf_log_likelihood(self.logits, self.labels, self.seq_len)
+        crf_loss, self.trans_params = tfa.crf_log_likelihood(self.logits, self.labels, self.seq_len)
 #        losses = focal_loss(self.gamma,self.alpha)
 #        self.loss = losses(self.labels, self.logits)
         self.loss = tf.reduce_mean(-crf_loss)
-        tf.summary.scalar("loss", self.loss)
+        tf.compat.v1.summary.scalar("loss", self.loss)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.lr)
         self.train_op = optimizer.minimize(self.loss)
 
-        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
+        print('Params number: {}'.format(np.sum([np.prod(v.get_shape().as_list()) for v in tf.compat.v1.trainable_variables()])))
 
-        sess_config = tf.ConfigProto()
+        sess_config = tf.compat.v1.ConfigProto()
         sess_config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=sess_config)
-        self.saver = tf.train.Saver(max_to_keep=self.max_to_keep)
-        self.sess.run(tf.global_variables_initializer())
+        self.sess = tf.compat.v1.Session(config=sess_config)
+        self.saver = tf.compat.v1.train.Saver(max_to_keep=self.max_to_keep)
+        self.sess.run(tf.compat.v1.global_variables_initializer())
 
 
     def restore_last_session(self, ckpt_path=None):
@@ -701,9 +701,9 @@ class BiLSTM_CRF_model:
         self.sess.close()
 
     def _add_summary(self):
-        self.summary = tf.summary.merge_all()
-        self.train_writer = tf.summary.FileWriter(self.summary_path + "train", self.sess.graph)
-        self.test_writer = tf.summary.FileWriter(self.summary_path + "test")
+        self.summary = tf.compat.v1.summary.merge_all()
+        self.train_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "train", self.sess.graph)
+        self.test_writer = tf.compat.v1.summary.FileWriter(self.summary_path + "test")
 
     def _get_feed_dict(self, batch, keep_prob=1.0, is_train=False, lr=None):
         feed_dict = {self.words: batch["words"], self.seq_len: batch["seq_len"], self.batch_size: batch["batch_size"]}
@@ -723,7 +723,7 @@ class BiLSTM_CRF_model:
         viterbi_sequences = []
         for logit, lens in zip(logits, seq_len):
             logit = logit[:lens]  # keep only the valid steps
-            viterbi_seq, viterbi_score = viterbi_decode(logit, trans_params)
+            viterbi_seq, viterbi_score = tfa.viterbi_decode(logit, trans_params)
             viterbi_sequences += [viterbi_seq]
         return viterbi_sequences
 
